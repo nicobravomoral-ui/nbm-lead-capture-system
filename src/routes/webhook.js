@@ -27,11 +27,13 @@ router.post('/meta', async (req, res) => {
   const body = req.body;
   if (body.object !== 'instagram' && body.object !== 'page') return;
 
+  const plataforma = body.object === 'instagram' ? 'ig' : 'fb';
+
   for (const entry of body.entry || []) {
     // Comentarios en Instagram / Facebook
     for (const change of entry.changes || []) {
       if (change.field === 'comments' || change.field === 'feed') {
-        await handleComment(change.value, entry.id);
+        await handleComment(change.value, entry.id, plataforma);
       }
     }
 
@@ -44,32 +46,41 @@ router.post('/meta', async (req, res) => {
   }
 });
 
-async function handleComment(value, entryId) {
+async function handleComment(value, entryId, plataforma) {
   try {
     const commentText = value.text || value.message || '';
+    if (!commentText) return;
+
     const commentId = value.id;
     const handle = value.from?.username || value.from?.name || 'desconocido';
-    const postUrl = value.post_id ? `https://www.instagram.com/p/${value.post_id}` : null;
-    const plataforma = value.item === 'comment' ? 'ig' : 'fb';
+    const postUrl = value.media?.id
+      ? `https://www.instagram.com/p/${value.media.id}`
+      : value.post_id
+        ? `https://www.instagram.com/p/${value.post_id}`
+        : null;
     const recipientId = value.recipient_id || entryId;
 
+    // PASO 1 — Buscar tenant por cuenta de red social
     const cuenta = await prisma.socialAccount.findFirst({
       where: { accountId: recipientId, activa: true },
       include: { tenant: true },
     });
     if (!cuenta) {
-      console.warn(`[WEBHOOK] No se encontró SocialAccount para accountId: ${recipientId}`);
+      console.warn(`[WEBHOOK] Sin SocialAccount para accountId: ${recipientId}`);
       return;
     }
 
+    // PASO 2 — Detectar intención
     const { tenant } = cuenta;
     const keywords = tenant.keywords?.length ? tenant.keywords : null;
     const score = detector.calcularScore(commentText, keywords);
 
-    if (score < 2) return;
+    if (score < 2) {
+      console.log(`[WEBHOOK] Comentario ignorado (score ${score}): "${commentText}"`);
+      return;
+    }
 
-    console.log(`[WEBHOOK] Lead detectado — @${handle}, score: ${score}`);
-
+    // PASO 3 — Persistir lead (independiente de lo que pase después)
     const lead = await prisma.lead.create({
       data: {
         tenantId: tenant.id,
@@ -82,7 +93,12 @@ async function handleComment(value, entryId) {
       },
     });
 
-    await engage.iniciarContacto(lead, commentId, cuenta.token, value.from?.id);
+    console.log(`[WEBHOOK] Lead guardado — id: ${lead.id}, @${handle}, score: ${score}`);
+
+    // PASO 4 — Engage (independiente: si falla, el lead ya está guardado)
+    engage.iniciarContacto(lead, commentId, cuenta.token, value.from?.id)
+      .catch(err => console.error(`[ENGAGE] Error al contactar lead ${lead.id}:`, err.message));
+
   } catch (err) {
     console.error('[WEBHOOK] Error en handleComment:', err.message);
   }

@@ -12,6 +12,7 @@ app.use('/api/leads', require('./routes/leads'));
 app.use('/api/brokers', require('./routes/brokers'));
 app.use('/api/tenants', require('./routes/tenants'));
 app.use('/api/setup', require('./routes/setup'));
+app.use('/api/test', require('./routes/test'));
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
