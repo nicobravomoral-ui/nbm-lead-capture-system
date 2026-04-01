@@ -90,4 +90,28 @@ router.get('/status', async (_req, res) => {
   res.json(tenants);
 });
 
+/**
+ * PUT /api/setup/token
+ * Actualiza el access token de una SocialAccount (cuando expira).
+ * Body: { igAccountId: "123", newToken: "EAAB..." }
+ */
+router.put('/token', async (req, res) => {
+  const { igAccountId, newToken } = req.body;
+  if (!igAccountId || !newToken) {
+    return res.status(400).json({ error: 'igAccountId y newToken requeridos' });
+  }
+
+  const cuenta = await prisma.socialAccount.findFirst({
+    where: { accountId: igAccountId },
+  });
+  if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' });
+
+  await prisma.socialAccount.update({
+    where: { id: cuenta.id },
+    data: { token: newToken },
+  });
+
+  res.json({ ok: true, mensaje: 'Token actualizado correctamente' });
+});
+
 module.exports = router;

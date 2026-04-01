@@ -85,4 +85,35 @@ router.get('/detector', (req, res) => {
   });
 });
 
+/**
+ * POST /api/test/dm
+ * Envía un DM real de prueba a un IGSID específico.
+ * Útil para validar token, permisos y conectividad con Meta API.
+ *
+ * Body: { igsid: "123456789", mensaje: "Hola, esto es una prueba" }
+ */
+router.post('/dm', async (req, res) => {
+  const { igsid, mensaje } = req.body;
+  if (!igsid) return res.status(400).json({ error: 'igsid requerido' });
+
+  const cuenta = await prisma.socialAccount.findFirst({
+    where: { activa: true },
+    include: { tenant: true },
+  });
+  if (!cuenta) return res.status(400).json({ error: 'Sin SocialAccount configurada' });
+
+  const meta = require('../lib/meta');
+  try {
+    const result = await meta.sendDM(
+      cuenta.accountId,
+      igsid,
+      mensaje || '¡Hola! Esto es un mensaje de prueba del sistema NBM Lead Capture 🏠',
+      cuenta.token
+    );
+    res.json({ ok: true, result });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 module.exports = router;
