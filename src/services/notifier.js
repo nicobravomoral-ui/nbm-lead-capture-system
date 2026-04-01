@@ -7,58 +7,79 @@ const client = twilio(
 );
 
 const FROM = process.env.TWILIO_WHATSAPP_FROM;
+const APP_URL = process.env.APP_URL || 'https://nbm-lead-capture-system-production.up.railway.app';
 
 /**
  * Notifica al broker por WhatsApp cuando se le asigna un lead calificado.
  */
 async function notificarBroker(broker, lead) {
   const nombre = lead.nombre || lead.handleRrss;
-  const dashboardUrl = `${process.env.APP_URL || 'https://tu-app.railway.app'}/api/leads/${lead.id}`;
+  const dashboardUrl = `${APP_URL}/dashboard`;
 
   const mensaje = `🔔 Nuevo lead calificado — NBM Lead Capture
 
 Nombre:        ${nombre}
-Red social:    ${lead.plataforma} (${lead.handleRrss})
+Red social:    ${lead.plataforma.toUpperCase()} (${lead.handleRrss})
 Comentó en:    ${lead.postUrl || 'N/A'}
 Tipo:          ${lead.tipoBuyer || 'No indicado'}
 Pie aprox.:    ${lead.pieEstimado || 'No indicado'}
 Disponible:    ${lead.disponibilidad || 'No indicado'}
 
-Ver ficha → ${dashboardUrl}`;
+Ver dashboard → ${dashboardUrl}`;
 
-  await client.messages.create({
-    from: FROM,
-    to: `whatsapp:${broker.whatsapp}`,
-    body: mensaje,
-  });
+  try {
+    const result = await client.messages.create({
+      from: FROM,
+      to: `whatsapp:${broker.whatsapp}`,
+      body: mensaje,
+    });
+    console.log(`[NOTIFIER] WhatsApp enviado a ${broker.whatsapp} — SID: ${result.sid}`);
+    return result;
+  } catch (err) {
+    console.error(`[NOTIFIER] Error Twilio al notificar broker ${broker.id}:`, err.message);
+    throw err;
+  }
 }
 
 /**
- * Notifica al admin del tenant cuando un lead queda sin broker disponible.
+ * Notifica al admin cuando un lead queda sin broker disponible.
  */
 async function notificarAdminSinBroker(leadId, tenantId) {
-  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+  const [tenant, lead, admin] = await Promise.all([
+    prisma.tenant.findUnique({ where: { id: tenantId } }),
+    prisma.lead.findUnique({ where: { id: leadId } }),
+    prisma.broker.findFirst({
+      where: { tenantId, activo: true },
+      orderBy: { createdAt: 'asc' },
+    }),
+  ]);
 
-  // Buscar el broker más antiguo del tenant como fallback para contactar al admin
-  const admin = await prisma.broker.findFirst({
-    where: { tenantId, activo: true },
-    orderBy: { createdAt: 'asc' },
-  });
-  if (!admin) return;
+  if (!admin) {
+    console.warn(`[NOTIFIER] Sin broker activo para notificar en tenant ${tenantId}`);
+    return;
+  }
 
-  const mensaje = `⚠️ Lead sin broker disponible — NBM Lead Capture
+  const mensaje = `⚠️ Lead sin broker — NBM Lead Capture
 
-El lead ${lead?.handleRrss} (${lead?.plataforma}) quedó sin broker asignado.
-Todos los brokers del tenant "${tenant?.nombre}" ya fueron intentados.
+El lead ${lead?.handleRrss} (${lead?.plataforma?.toUpperCase()}) quedó sin broker asignado en "${tenant?.nombre}".
 
-Acción requerida: agregar un broker o reasignar manualmente.`;
+Todos los brokers disponibles ya fueron intentados.
+Acción requerida: agregar un broker o reasignar manualmente.
 
-  await client.messages.create({
-    from: FROM,
-    to: `whatsapp:${admin.whatsapp}`,
-    body: mensaje,
-  });
+Ver dashboard → ${APP_URL}/dashboard`;
+
+  try {
+    const result = await client.messages.create({
+      from: FROM,
+      to: `whatsapp:${admin.whatsapp}`,
+      body: mensaje,
+    });
+    console.log(`[NOTIFIER] Alerta SIN_BROKER enviada a ${admin.whatsapp} — SID: ${result.sid}`);
+    return result;
+  } catch (err) {
+    console.error(`[NOTIFIER] Error Twilio en alerta SIN_BROKER:`, err.message);
+    throw err;
+  }
 }
 
 module.exports = { notificarBroker, notificarAdminSinBroker };

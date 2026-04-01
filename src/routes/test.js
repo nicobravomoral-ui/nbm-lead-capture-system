@@ -86,6 +86,30 @@ router.get('/detector', (req, res) => {
 });
 
 /**
+ * POST /api/test/whatsapp
+ * Envía un WhatsApp de prueba real vía Twilio al broker configurado.
+ * Body: { whatsapp: "+56912345678" }  (opcional, usa el broker configurado si no se pasa)
+ */
+router.post('/whatsapp', async (req, res) => {
+  const twilio = require('twilio');
+  const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+
+  const numero = req.body.whatsapp || '+56975326208';
+  const FROM = process.env.TWILIO_WHATSAPP_FROM;
+
+  try {
+    const result = await client.messages.create({
+      from: FROM,
+      to: `whatsapp:${numero}`,
+      body: '🔔 Prueba NBM Lead Capture — sistema funcionando correctamente ✅',
+    });
+    res.json({ ok: true, sid: result.sid, to: numero, status: result.status });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
  * POST /api/test/dm
  * Envía un DM real de prueba a un IGSID específico.
  * Útil para validar token, permisos y conectividad con Meta API.
