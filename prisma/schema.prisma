@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id        String          @id @default(cuid())
+  nombre    String
+  plan      String          @default("pilot")
+  keywords  String[]
+  createdAt DateTime        @default(now())
+  brokers   Broker[]
+  leads     Lead[]
+  cuentas   SocialAccount[]
+}
+
+model SocialAccount {
+  id         String  @id @default(cuid())
+  tenantId   String
+  plataforma String
+  accountId  String
+  token      String
+  activa     Boolean @default(true)
+  tenant     Tenant  @relation(fields: [tenantId], references: [id])
+}
+
+model Broker {
+  id           String       @id @default(cuid())
+  tenantId     String
+  nombre       String
+  whatsapp     String
+  zona         String?
+  activo       Boolean      @default(true)
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  asignaciones Asignacion[]
+}
+
+model Lead {
+  id             String        @id @default(cuid())
+  tenantId       String
+  nombre         String?
+  handleRrss     String
+  plataforma     String
+  postUrl        String?
+  comentario     String
+  score          Int
+  estado         String        @default("NUEVO")
+  tipoBuyer      String?
+  pieEstimado    String?
+  disponibilidad String?
+  ultimoContacto DateTime?
+  createdAt      DateTime      @default(now())
+  tenant         Tenant        @relation(fields: [tenantId], references: [id])
+  asignaciones   Asignacion[]
+  conversacion   Conversacion?
+}
+
+model Asignacion {
+  id               String   @id @default(cuid())
+  leadId           String
+  brokerId         String
+  orden            Int
+  activa           Boolean  @default(true)
+  motivoCambio     String?
+  fechaAsignacion  DateTime @default(now())
+  fechaVencimiento DateTime
+  lead             Lead     @relation(fields: [leadId], references: [id])
+  broker           Broker   @relation(fields: [brokerId], references: [id])
+}
+
+model Conversacion {
+  id        String   @id @default(cuid())
+  leadId    String   @unique
+  mensajes  Json
+  estado    String   @default("ACTIVA")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lead      Lead     @relation(fields: [leadId], references: [id])
+}
