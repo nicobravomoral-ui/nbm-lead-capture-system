@@ -19,13 +19,14 @@ model Tenant {
 }
 
 model SocialAccount {
-  id         String  @id @default(cuid())
+  id         String   @id @default(cuid())
   tenantId   String
   plataforma String
   accountId  String
   token      String
-  activa     Boolean @default(true)
-  tenant     Tenant  @relation(fields: [tenantId], references: [id])
+  activa     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
 }
 
 model Broker {
@@ -35,6 +36,7 @@ model Broker {
   whatsapp     String
   zona         String?
   activo       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
   tenant       Tenant       @relation(fields: [tenantId], references: [id])
   asignaciones Asignacion[]
 }
