@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NBM Lead Capture — Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f4f5f7;
+      color: #172b4d;
+    }
+
+    header {
+      background: #0052cc;
+      color: white;
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 { font-size: 18px; font-weight: 600; }
+    header span { font-size: 13px; opacity: 0.8; }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .metric-card {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .metric-card .number { font-size: 36px; font-weight: 700; color: #0052cc; }
+    .metric-card .label { font-size: 12px; color: #6b778c; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: #172b4d;
+    }
+
+    .pipeline {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .column {
+      background: #f4f5f7;
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 200px;
+    }
+    .column-header {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    .estado-NUEVO          { background: #e3fcef; color: #006644; }
+    .estado-CONTACTADO     { background: #deebff; color: #0747a6; }
+    .estado-EN_CONVERSACION{ background: #fffae6; color: #974f0c; }
+    .estado-CALIFICADO     { background: #fff0b3; color: #172b4d; }
+    .estado-AGENDADO       { background: #e3fcef; color: #006644; }
+    .estado-CONVERTIDO     { background: #e3fcef; color: #006644; }
+    .estado-PERDIDO        { background: #ffebe6; color: #bf2600; }
+    .estado-NO_CALIFICADO  { background: #ffebe6; color: #bf2600; }
+    .estado-SIN_RESPUESTA  { background: #ffebe6; color: #bf2600; }
+    .estado-REASIGNADO     { background: #fffae6; color: #974f0c; }
+    .estado-SIN_BROKER     { background: #ffebe6; color: #bf2600; }
+
+    .lead-card {
+      background: white;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+      cursor: pointer;
+      transition: box-shadow 0.15s;
+    }
+    .lead-card:hover { box-shadow: 0 3px 8px rgba(0,0,0,0.12); }
+    .lead-card .handle { font-weight: 600; font-size: 13px; }
+    .lead-card .comentario {
+      font-size: 11px;
+      color: #6b778c;
+      margin-top: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 160px;
+    }
+    .lead-card .meta { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
+    .score-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: #0052cc;
+      color: white;
+    }
+    .platform-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: #f4f5f7;
+      color: #6b778c;
+      text-transform: uppercase;
+    }
+
+    .leads-table {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      background: #f4f5f7;
+      padding: 12px 16px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #6b778c;
+    }
+    td { padding: 12px 16px; font-size: 13px; border-top: 1px solid #f4f5f7; }
+    tr:hover td { background: #f8f9fa; }
+
+    .estado-pill {
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 48px;
+      color: #6b778c;
+      font-size: 14px;
+    }
+
+    .refresh-btn {
+      background: #0052cc;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .refresh-btn:hover { background: #0065ff; }
+
+    .last-update { font-size: 12px; color: #6b778c; margin-left: 12px; }
+
+    .tabs { display: flex; gap: 8px; margin-bottom: 24px; }
+    .tab {
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      background: white;
+      border: 1px solid #dfe1e6;
+      color: #6b778c;
+    }
+    .tab.active { background: #0052cc; color: white; border-color: #0052cc; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>NBM Lead Capture</h1>
+  <span id="tenant-name">Cargando...</span>
+</header>
+
+<div class="container">
+
+  <div style="display:flex; align-items:center; margin-bottom:24px;">
+    <button class="refresh-btn" onclick="cargarTodo()">↻ Actualizar</button>
+    <span class="last-update" id="last-update"></span>
+  </div>
+
+  <!-- Métricas -->
+  <div class="metrics" id="metrics">
+    <div class="metric-card"><div class="number" id="m-total">—</div><div class="label">Total Leads</div></div>
+    <div class="metric-card"><div class="number" id="m-nuevos">—</div><div class="label">Nuevos</div></div>
+    <div class="metric-card"><div class="number" id="m-calificados">—</div><div class="label">Calificados</div></div>
+    <div class="metric-card"><div class="number" id="m-agendados">—</div><div class="label">Agendados</div></div>
+    <div class="metric-card"><div class="number" id="m-sinbroker">—</div><div class="label">Sin Broker</div></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="setTab('pipeline')">Pipeline</div>
+    <div class="tab" onclick="setTab('tabla')">Todos los leads</div>
+  </div>
+
+  <!-- Pipeline Kanban -->
+  <div id="view-pipeline">
+    <div class="pipeline" id="pipeline"></div>
+  </div>
+
+  <!-- Tabla -->
+  <div id="view-tabla" style="display:none;">
+    <div class="leads-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Handle</th>
+            <th>Plataforma</th>
+            <th>Score</th>
+            <th>Estado</th>
+            <th>Comentario</th>
+            <th>Fecha</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const TENANT_ID = 'cmngh004o00001476hr9cpo1t';
+  const ESTADOS_PIPELINE = ['NUEVO','CONTACTADO','EN_CONVERSACION','CALIFICADO','AGENDADO','REASIGNADO','SIN_BROKER','PERDIDO'];
+
+  let todosLeads = [];
+
+  async function cargarTodo() {
+    await Promise.all([cargarMetricas(), cargarLeads()]);
+    document.getElementById('last-update').textContent = 'Actualizado: ' + new Date().toLocaleTimeString('es-CL');
+  }
+
+  async function cargarMetricas() {
+    const res = await fetch(`/api/tenants/${TENANT_ID}/dashboard`);
+    const d = await res.json();
+    document.getElementById('m-total').textContent = d.total;
+    document.getElementById('m-nuevos').textContent = d.nuevos;
+    document.getElementById('m-calificados').textContent = d.calificados;
+    document.getElementById('m-agendados').textContent = d.agendados;
+    document.getElementById('m-sinbroker').textContent = d.sinBroker;
+  }
+
+  async function cargarLeads() {
+    const res = await fetch(`/api/leads?tenantId=${TENANT_ID}`);
+    todosLeads = await res.json();
+    renderPipeline();
+    renderTabla();
+  }
+
+  function renderPipeline() {
+    const pipeline = document.getElementById('pipeline');
+    pipeline.innerHTML = '';
+
+    for (const estado of ESTADOS_PIPELINE) {
+      const leads = todosLeads.filter(l => l.estado === estado);
+      const col = document.createElement('div');
+      col.className = 'column';
+      col.innerHTML = `<span class="column-header estado-${estado}">${estado.replace('_',' ')} (${leads.length})</span>`;
+
+      if (leads.length === 0) {
+        col.innerHTML += `<div style="font-size:12px;color:#6b778c;padding:8px;">Sin leads</div>`;
+      } else {
+        leads.forEach(lead => {
+          col.innerHTML += `
+            <div class="lead-card">
+              <div class="handle">${lead.handleRrss}</div>
+              <div class="comentario">${lead.comentario}</div>
+              <div class="meta">
+                <span class="score-badge">Score ${lead.score}</span>
+                <span class="platform-badge">${lead.plataforma}</span>
+              </div>
+            </div>`;
+        });
+      }
+      pipeline.appendChild(col);
+    }
+  }
+
+  function renderTabla() {
+    const tbody = document.getElementById('tabla-body');
+    if (todosLeads.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty">Sin leads todavía. Cuando alguien comente en Instagram aparecerá aquí.</div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = todosLeads.map(l => `
+      <tr>
+        <td><strong>${l.handleRrss}</strong></td>
+        <td>${l.plataforma.toUpperCase()}</td>
+        <td><span class="score-badge">${l.score}/10</span></td>
+        <td><span class="estado-pill estado-${l.estado}">${l.estado.replace('_',' ')}</span></td>
+        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${l.comentario}</td>
+        <td>${new Date(l.createdAt).toLocaleDateString('es-CL')}</td>
+      </tr>`).join('');
+  }
+
+  async function cargarTenant() {
+    const res = await fetch('/api/setup/status');
+    const tenants = await res.json();
+    if (tenants[0]) document.getElementById('tenant-name').textContent = tenants[0].nombre;
+  }
+
+  function setTab(tab) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('view-pipeline').style.display = tab === 'pipeline' ? '' : 'none';
+    document.getElementById('view-tabla').style.display = tab === 'tabla' ? '' : 'none';
+  }
+
+  // Auto-refresh cada 30 segundos
+  cargarTenant();
+  cargarTodo();
+  setInterval(cargarTodo, 30000);
+</script>
+
+</body>
+</html>
