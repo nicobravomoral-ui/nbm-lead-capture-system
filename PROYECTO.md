@@ -1,8 +1,9 @@
 # NBM Lead Capture System — Estado del Proyecto
 
-**Última actualización:** 1 Abril 2026 — 18:30
+**Última actualización:** 2 Abril 2026
 **Entorno productivo:** Railway
 **Repositorio:** https://github.com/nicobravomoral-ui/nbm-lead-capture-system
+**Commit actual:** `9baa72c`
 
 ---
 
@@ -11,10 +12,10 @@
 | Recurso | URL |
 |---|---|
 | Servidor productivo | `https://nbm-lead-capture-system-production.up.railway.app` |
-| Health check | `https://nbm-lead-capture-system-production.up.railway.app/health` |
-| Dashboard | `https://nbm-lead-capture-system-production.up.railway.app/dashboard` |
-| Webhook Meta | `https://nbm-lead-capture-system-production.up.railway.app/webhook/meta` |
-| Estado del sistema | `https://nbm-lead-capture-system-production.up.railway.app/api/setup/status` |
+| Health check | `/health` |
+| Dashboard | `/dashboard` |
+| Webhook Meta | `/webhook/meta` |
+| Estado del sistema | `/api/setup/status` |
 
 ---
 
@@ -22,9 +23,9 @@
 
 | Servicio | Plataforma | Estado |
 |---|---|---|
-| Servidor Node.js | Railway | ✅ Activo y deployado |
-| Base de datos PostgreSQL | Railway | ✅ Activa, schema aplicado |
-| Repositorio GitHub | `nicobravomoral-ui/nbm-lead-capture-system` | ✅ Auto-deploy desde main |
+| Servidor Node.js 22 + Express 4 | Railway | ✅ Activo |
+| Base de datos PostgreSQL | Railway | ✅ Schema aplicado (`prisma db push`) |
+| Repositorio GitHub | `nicobravomoral-ui/nbm-lead-capture-system` | ✅ Auto-deploy desde `main` |
 
 ---
 
@@ -35,10 +36,9 @@
 | Campo | Valor |
 |---|---|
 | Tenant ID | `cmngh004o00001476hr9cpo1t` |
+| IG Account ID correcto | `66869359832` (`nicolas.bravo.inversiones`) |
+| Facebook Page ID | `1031412506728321` (`Nbm Lead Capture System`) |
 | Plan | pilot |
-| IG Account ID actual | `1470519741134938` ⚠️ INCORRECTO — ver bloqueo Meta |
-| IG Account ID real (nicolas.bravo.inversiones) | `66869359832` ✅ CONFIRMADO |
-| Facebook Page ID (Nbm Lead Capture System) | `1031412506728321` ✅ CONFIRMADO |
 
 ### Broker configurado
 
@@ -48,213 +48,148 @@
 | WhatsApp | +56975326208 |
 | Broker ID | `cmngh006600041476yhqclnb7` |
 
-### Variables de entorno (Railway — servicio nbm-lead-capture)
+### Variables de entorno (Railway)
 
-| Variable | Estado | Notas |
-|---|---|---|
-| `DATABASE_URL` | ✅ Configurada | Referencia `${{ Postgres.DATABASE_URL }}` |
-| `ANTHROPIC_API_KEY` | ✅ Configurada | Claude Haiku |
-| `META_APP_ID` | ✅ Configurada | `1470519741134938` (ID de la app Meta) |
-| `META_APP_SECRET` | ✅ Configurada | Regenerar después de uso en sesión |
-| `META_VERIFY_TOKEN` | ✅ Configurada | `j8e9kshaakkk373910` |
-| `TWILIO_ACCOUNT_SID` | ✅ Configurada | |
-| `TWILIO_AUTH_TOKEN` | ✅ Configurada | |
-| `TWILIO_WHATSAPP_FROM` | ✅ Configurada | `whatsapp:+14155238886` (sandbox) |
-| `NODE_ENV` | ✅ Configurada | `production` |
-| `TZ` | ✅ Configurada | `America/Santiago` |
+| Variable | Estado |
+|---|---|
+| `DATABASE_URL` | ✅ `${{ Postgres.DATABASE_URL }}` |
+| `ANTHROPIC_API_KEY` | ✅ Claude Haiku |
+| `META_APP_ID` | ✅ `1470519741134938` |
+| `META_APP_SECRET` | ✅ Configurada |
+| `META_VERIFY_TOKEN` | ✅ `j8e9kshaakkk373910` |
+| `TWILIO_ACCOUNT_SID` | ✅ Configurada |
+| `TWILIO_AUTH_TOKEN` | ✅ Configurada |
+| `TWILIO_WHATSAPP_FROM` | ✅ `whatsapp:+14155238886` (sandbox) |
+| `NODE_ENV` | ✅ `production` |
+| `TZ` | ✅ `America/Santiago` |
 
 ### Meta for Developers
 
 | Campo | Valor |
 |---|---|
-| App name | `nbm-lead-capture` |
-| Callback URL webhook | `https://nbm-lead-capture-system-production.up.railway.app/webhook/meta` |
+| App | `nbm-lead-capture` (Development Mode) |
+| Webhook callback | `/webhook/meta` |
 | Verify Token | `j8e9kshaakkk373910` |
 | Webhook | ✅ Verificado y activo |
 | Campos suscritos | `comments`, `messages` |
-| Tipo de integración | Instagram API with Facebook Login (Graph API) |
-| Cuenta Instagram conectada | ✅ `nicolas.bravo.inversiones` conectada a página "Nbm Lead Capture System" |
-
-### Token de acceso Instagram
-
-| Campo | Valor |
-|---|---|
-| Tipo | Page Access Token (larga duración) |
-| Válido hasta | ~60 días desde 1 Abril 2026 |
-| Renovación | `PUT /api/setup/token` |
+| Cuenta IG conectada | ✅ `nicolas.bravo.inversiones` → página "Nbm Lead Capture System" |
+| Token largo plazo | ✅ En DB. Válido ~60 días desde 1 Abril 2026 |
 
 ---
 
-## ARQUITECTURA DEL SISTEMA
+## ARQUITECTURA
 
 ```
 Comentario en IG/FB
         ↓
-   LISTEN (webhook POST /webhook/meta)
+   LISTEN    → POST /webhook/meta
         ↓
-   DETECT (detector.js — keywords + score 1-10)
-        ↓ score >= 2
-   ENGAGE (engage.js — respuesta pública + DM)     ← bloqueo Meta
+   DETECT    → detector.js (keywords + score 1–10, umbral ≥ 2)
         ↓
-   QUALIFY (qualify.js — Claude Haiku, 3 preguntas) ← pendiente prueba real
+   ENGAGE    → engage.js (DM Meta API) — fire-and-forget
         ↓
-   ROUTE (router.js — asignar broker round-robin)
+   QUALIFY   → qualify.js (Claude Haiku, 3 preguntas, MAX_TURNOS=4)
         ↓
-   NOTIFY (notifier.js — WhatsApp Twilio)           ← pendiente prueba real
+   ROUTE     → router.js (round-robin, expiry 5 días)
         ↓
-   CRON (reasignacion.js — 09:00 AM, 5 días)       ← implementado, sin probar
+   NOTIFY    → notifier.js (WhatsApp Twilio al broker)
+        ↓
+   CRON      → reasignacion.js (09:00 AM, reasigna leads vencidos)
 ```
 
 ---
 
-## ESTADO DETALLADO POR FASE
+## RESUMEN EJECUTIVO — 2 ABRIL 2026
+
+### Qué está funcionando ✅
+
+| Componente | Validación |
+|---|---|
+| Servidor Railway | `/health` responde con todas las vars ✅ |
+| PostgreSQL + Prisma | `prisma db push` en deploy, schema completo |
+| Webhook Meta (verificación GET) | Verificado desde Meta Developers |
+| Webhook Meta (recepción POST) | Simulado con payload IG real, lead persistido |
+| Detector de keywords | `GET /api/test/detector` — score calculado correctamente |
+| Creación de leads | `POST /api/test/simular-comentario` — lead en DB |
+| Dashboard Kanban | `/dashboard` — actualización auto 30s |
+| Twilio WhatsApp (prueba directa) | `POST /api/test/whatsapp` — SID retornado, mensaje queued |
+| `qualify.js` — código | Implementado con upsert, MAX_TURNOS, español chileno |
+| `router.js` — código | Round-robin con 5-day expiry |
+| `notifier.js` — código | Mensaje formateado, lazy Twilio client |
+| Error handling Express 4 | **try/catch en todos los handlers async** (fix commit `9baa72c`) |
+
+### Bloqueantes ya resueltos ✅
+
+| Bloqueante | Fix aplicado |
+|---|---|
+| `DATABASE_URL` placeholder → crash Railway | Variable referencia Railway correcta |
+| `prisma migrate deploy` sin carpeta migrations | Cambiado a `prisma db push` en `railway.toml` |
+| Webhook 403 por Account ID erróneo | ID real `66869359832` identificado y configurado |
+| `plataforma` siempre `'fb'` | Detectado desde `body.object`, no `value.item` |
+| Twilio crash al startup | Lazy `getClient()` — instanciación solo al usar |
+| Health mostrando commit hardcodeado | Usa `process.env.RAILWAY_GIT_COMMIT_SHA` |
+| `POST /api/test/qualify` → 502 crash | Try/catch en todos los handlers async |
+| SocialAccount incorrecta en findFirst | `orderBy: createdAt desc` + cuenta errónea desactivada |
+
+### Riesgos pendientes ⚠️
+
+| Riesgo | Impacto | Acción requerida |
+|---|---|---|
+| Sandbox Twilio no activado | No llega WhatsApp al broker | Enviar `join <código>` desde +56975326208 a +14155238886 |
+| Token IG vence en ~58 días | Engage falla silenciosamente | `PUT /api/setup/token` antes de vencer |
+| Meta app en Development Mode | DMs solo llegan a testers | Agregar testers o hacer App Review |
+| `qualify.js` no probado con Claude real | Flujo completo no validado end-to-end | Correr `POST /api/test/flujo-completo` |
 
 ---
 
-### FASE 1 — Infraestructura y detección ✅ COMPLETA Y VALIDADA
+## ESTADO POR FASE
 
-| Tarea | Estado | Validación |
+### FASE 1 — Infraestructura y detección ✅ COMPLETA
+
+Todos los componentes validados. Webhook activo, leads persisten en DB, dashboard operativo.
+
+### FASE 2 — Automatización del flujo ⚠️ CÓDIGO COMPLETO / PRUEBA PENDIENTE
+
+| Bloque | Código | Prueba end-to-end |
 |---|---|---|
-| Proyecto Node.js + Express en Railway | ✅ | `/health` responde `{status: ok}` |
-| PostgreSQL conectado y schema aplicado | ✅ | `prisma db push` ejecutado en deploy |
-| Webhook Meta GET (verificación) | ✅ | Verificado en Meta Developers |
-| Webhook Meta POST (recepción eventos) | ✅ | Código en `routes/webhook.js` |
-| Clasificador keywords + score 1-10 | ✅ | `/api/test/detector?texto=me interesa el precio` → score 6 |
-| Lead guardado en PostgreSQL | ✅ | `/api/test/simular-comentario` → lead creado y persistido |
-| Dashboard HTML con pipeline kanban | ✅ | Visible en `/dashboard` |
-| Tenant LoopOn + broker en DB | ✅ | `/api/setup/status` confirma datos |
-
----
-
-### FASE 2 — Automatización del flujo ⚠️ EN PROGRESO
-
-#### Bloque 1 — DM automático vía Meta API
-
-| Tarea | Estado | Notas |
-|---|---|---|
-| Código `engage.js` | ✅ Implementado | Respuesta pública + DM con nombre tenant correcto |
-| Errores detallados Meta API | ✅ Implementado | `meta.js` muestra código y mensaje exacto |
-| Engage desacoplado de persistencia | ✅ Implementado | Fire-and-forget, lead se guarda siempre |
-| Token de larga duración en DB | ✅ Actualizado | Válido ~60 días |
-| `PUT /api/setup/token` para renovar | ✅ Implementado | |
-| **Prueba real con comentario IG** | ❌ BLOQUEADO | Ver bloqueo Meta abajo |
-
-#### Bloque 2 — Notificación WhatsApp Twilio
-
-| Tarea | Estado | Notas |
-|---|---|---|
-| Código `notifier.js` | ✅ Implementado | Mensaje formateado según spec |
-| URL dashboard correcta en mensaje | ✅ Corregido | Apunta a `/dashboard` real |
-| Logging con Twilio SID | ✅ Implementado | |
-| `POST /api/test/whatsapp` | ✅ Implementado | Para probar sin flujo completo |
-| **Sandbox Twilio activado** | ⚠️ PENDIENTE | Ver instrucciones abajo |
-| **Prueba real WhatsApp** | ⚠️ PENDIENTE | Requiere sandbox activo |
-
-#### Bloque 3 — Conversación Claude Haiku
-
-| Tarea | Estado | Notas |
-|---|---|---|
-| Código `qualify.js` | ✅ Implementado | 3 preguntas, detección CALIFICADO/NO_CALIFICADO |
-| System prompt en español chileno | ✅ Implementado | Según spec de Instrucciones.md |
-| Extracción de datos del lead | ✅ Implementado | tipoBuyer, pieEstimado, disponibilidad |
-| **Prueba real con DM** | ❌ BLOQUEADO | Depende de bloqueo Meta |
-
----
+| DM automático Meta API | ✅ | ❌ Bloqueado: Meta Dev Mode |
+| WhatsApp Twilio broker | ✅ | ⚠️ Pendiente: activar sandbox |
+| Conversación Claude Haiku | ✅ | ⚠️ Pendiente: correr flujo-completo |
+| Error handling Express 4 | ✅ `9baa72c` | — |
 
 ### FASE 3 — Dashboard y multi-tenant ⏸ NO INICIADA
 
-| Tarea | Estado |
-|---|---|
-| Dashboard kanban básico | ✅ Adelantado en Fase 1 |
-| Configuración keywords desde UI | ❌ Pendiente |
-| Integración TikTok | ❌ Pendiente |
-| Multi-tenant: segundo tenant | ❌ Pendiente |
-
----
-
 ### FASE 4 — Escala ⏸ NO INICIADA
 
-| Tarea | Estado |
-|---|---|
-| Social listening externo (Apify) | ❌ Pendiente |
-| Reportes exportables PDF | ❌ Pendiente |
-| Conector CRM NBM | ❌ Pendiente |
-| OAuth flow onboarding | ❌ Pendiente |
-
 ---
 
-## BLOQUEOS ACTIVOS
-
-### 🟡 BLOQUEO 1 — Permisos Meta app en "declined" (app en Development Mode)
-
-**Progreso hoy (1 Abril 2026):**
-- ✅ Página de Facebook "Nbm Lead Capture System" creada (ID: `1031412506728321`)
-- ✅ Instagram `nicolas.bravo.inversiones` conectado a la página (confirmado en Meta Business Suite)
-- ✅ Instagram Business Account ID real obtenido: **`66869359832`**
-- ❌ Permisos `pages_show_list`, `instagram_basic`, `instagram_manage_comments`, etc. están en status "declined" en la app
-
-**Causa:** La Meta app `nbm-lead-capture` está en **Development Mode**. Los permisos avanzados de Instagram/páginas requieren que:
-1. La app complete **App Review** en Meta for Developers (para producción), O
-2. Se genere el token correctamente aceptando todos los permisos en el flujo OAuth
-
-**Siguiente acción — Obtener token válido:**
-```
-POST /api/setup/tenant
-{
-  "tenantNombre": "LoopOn",
-  "igAccountId": "66869359832",
-  "igAccessToken": "TOKEN_LARGO_CON_PERMISOS",
-  "brokerNombre": "Nicolás Bravo",
-  "brokerWhatsapp": "+56975326208"
-}
-```
-
-**Para obtener el TOKEN_LARGO_CON_PERMISOS:**
-1. Ir a: https://developers.facebook.com/tools/explorer/
-2. App: `nbm-lead-capture`
-3. Añadir permisos: `pages_show_list`, `instagram_basic`, `instagram_manage_comments`, `instagram_manage_messages`, `pages_manage_metadata`, `pages_read_engagement`
-4. Hacer clic en "Generate Access Token" y aceptar TODOS los permisos
-5. Verificar con `GET /me/permissions` que todos están en "granted"
-6. Usar el token resultante en el endpoint `PUT /api/setup/token`
-
----
-
-### 🟡 BLOQUEO 2 — Sandbox Twilio no activado
-
-**Problema:** Para recibir WhatsApp desde el sandbox de Twilio, el número `+56975326208` debe enviar primero el mensaje de activación.
-
-**Qué se necesita:**
-1. Ir a [console.twilio.com](https://console.twilio.com) → Messaging → Try it out → Send a WhatsApp message
-2. Copiar la palabra clave de activación (ej: `join word-word`)
-3. Desde el WhatsApp `+56975326208`, enviar ese mensaje al número `+1 415 523 8886`
-4. Una vez activado, probar con `POST /api/test/whatsapp`
-
----
-
-## ENDPOINTS DE PRUEBA DISPONIBLES
+## ENDPOINTS ÚTILES
 
 ```
-GET  /api/test/detector?texto=me interesa    → prueba clasificador sin DB
-POST /api/test/simular-comentario            → crea lead simulado en DB
-POST /api/test/whatsapp                      → envía WhatsApp real vía Twilio
-POST /api/test/dm                            → envía DM real vía Meta API
-PUT  /api/setup/token                        → renueva token de Instagram
-GET  /api/setup/status                       → estado completo del sistema
+GET  /health                                   → vars de entorno + commit actual
+GET  /api/setup/status                         → tenant, cuentas, brokers en DB
+GET  /api/test/env-check                       → vars sin exponer valores
+GET  /api/test/detector?texto=me interesa      → prueba clasificador sin DB
+POST /api/test/simular-comentario              → crea lead simulado en DB
+POST /api/test/qualify                         → turno de conversación Claude
+POST /api/test/flujo-completo                  → pipeline end-to-end simulado
+POST /api/test/whatsapp                        → WhatsApp real vía Twilio
+POST /api/test/dm                              → DM real vía Meta API
+PUT  /api/setup/token                          → renovar token Instagram
+GET  /dashboard                                → kanban pipeline + métricas
 ```
 
 ---
 
 ## PRÓXIMOS PASOS EN ORDEN
 
-1. **Actualizar igAccountId en el sistema** — hacer `POST /api/setup/tenant` con `igAccountId: "66869359832"` y token correcto
-2. **Obtener token con permisos completos** — en Graph API Explorer, añadir todos los permisos y aceptarlos en el flujo OAuth
-3. **Resolver bloqueo Twilio** — activar sandbox desde WhatsApp +56975326208
-3. **Probar WhatsApp** — `POST /api/test/whatsapp` debe llegar al celular
-4. **Probar DM** — comentar en Instagram real y verificar que llega el DM
-5. **Validar flujo completo** — comentario → lead → DM → Claude → WhatsApp broker
-6. **Cerrar Fase 2** y avanzar a Fase 3
+1. **Validar pipeline Claude** — `POST /api/test/flujo-completo` (ver `TESTS.md`)
+2. **Activar sandbox Twilio** — enviar join code desde +56975326208 a +14155238886
+3. **Validar WhatsApp broker** — después del flujo-completo, verificar que el WhatsApp llega
+4. **Probar DM real IG** — agregar tester en Meta Developers o completar App Review
+5. **Cerrar Fase 2** y abrir Fase 3
 
 ---
 
-*Documento confidencial — NBM Asesorías e Inversiones*
-*Generado: Abril 2026*
+*Documento de trabajo — NBM Asesorías e Inversiones*
+*Actualizado: 2 Abril 2026*
