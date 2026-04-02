@@ -23,8 +23,14 @@ app.use('/api/tenants', require('./routes/tenants'));
 app.use('/api/setup', require('./routes/setup'));
 app.use('/api/test', require('./routes/test'));
 
-// Health check
-app.get('/health', (_req, res) => res.json({ status: 'ok', commit: 'd82daae' }));
+// Health check — incluye diagnóstico de variables y versión
+app.get('/health', (_req, res) => {
+  const vars = ['DATABASE_URL','ANTHROPIC_API_KEY','META_APP_ID','META_VERIFY_TOKEN',
+                 'TWILIO_ACCOUNT_SID','TWILIO_AUTH_TOKEN','TWILIO_WHATSAPP_FROM'];
+  const env = {};
+  for (const v of vars) env[v] = process.env[v] ? '✅' : '❌ FALTA';
+  res.json({ status: 'ok', commit: '18170a5', node: process.version, env });
+});
 
 // Cron de reasignación
 require('./jobs/reasignacion');
