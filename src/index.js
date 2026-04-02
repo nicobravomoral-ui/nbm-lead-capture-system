@@ -32,6 +32,12 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', commit: process.env.RAILWAY_GIT_COMMIT_SHA || '5f9efbb', node: process.version, env });
 });
 
+// Global error handler (Express 4 no catches async errors — this catches forwarded ones)
+app.use((err, req, res, _next) => {
+  console.error('[ERROR]', err.message);
+  res.status(500).json({ ok: false, error: err.message });
+});
+
 // Cron de reasignación
 require('./jobs/reasignacion');
 
