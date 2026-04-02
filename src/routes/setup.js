@@ -91,6 +91,23 @@ router.get('/status', async (_req, res) => {
 });
 
 /**
+ * DELETE /api/setup/cuenta/:accountId
+ * Desactiva una SocialAccount por accountId (no la borra, solo activa=false).
+ */
+router.delete('/cuenta/:accountId', async (req, res) => {
+  const cuenta = await prisma.socialAccount.findFirst({
+    where: { accountId: req.params.accountId },
+  });
+  if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' });
+
+  await prisma.socialAccount.update({
+    where: { id: cuenta.id },
+    data: { activa: false },
+  });
+  res.json({ ok: true, mensaje: `Cuenta ${req.params.accountId} desactivada` });
+});
+
+/**
  * PUT /api/setup/token
  * Actualiza el access token de una SocialAccount (cuando expira).
  * Body: { igAccountId: "123", newToken: "EAAB..." }

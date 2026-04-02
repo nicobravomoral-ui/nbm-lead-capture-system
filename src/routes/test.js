@@ -3,26 +3,55 @@ const router = express.Router();
 const prisma = require('../lib/prisma');
 const detector = require('../services/detector');
 
+// Siempre usa la SocialAccount más reciente y activa
+async function getCuentaActiva() {
+  return prisma.socialAccount.findFirst({
+    where: { activa: true },
+    orderBy: { createdAt: 'desc' }, // la más reciente primero
+    include: { tenant: true },
+  });
+}
+
+/**
+ * GET /api/test/env-check
+ * Verifica qué variables de entorno críticas están definidas (sin exponer valores).
+ */
+router.get('/env-check', (_req, res) => {
+  const vars = [
+    'DATABASE_URL',
+    'ANTHROPIC_API_KEY',
+    'META_APP_ID',
+    'META_APP_SECRET',
+    'META_VERIFY_TOKEN',
+    'TWILIO_ACCOUNT_SID',
+    'TWILIO_AUTH_TOKEN',
+    'TWILIO_WHATSAPP_FROM',
+    'NODE_ENV',
+    'TZ',
+  ];
+
+  const resultado = {};
+  for (const v of vars) {
+    const val = process.env[v];
+    if (!val) {
+      resultado[v] = '❌ NO DEFINIDA';
+    } else {
+      resultado[v] = `✅ definida (${val.slice(0, 6)}...)`;
+    }
+  }
+
+  res.json(resultado);
+});
+
 /**
  * POST /api/test/simular-comentario
- * Simula exactamente el payload que Instagram enviaría al webhook.
- * Útil para validar el flujo comentario → detector → DB sin depender de Meta.
- *
- * Body: {
- *   texto: "me interesa, cuánto vale?",
- *   handle: "@usuario_prueba"   (opcional, default: @test_user)
- * }
+ * Simula el payload exacto que Instagram enviaría al webhook.
  */
 router.post('/simular-comentario', async (req, res) => {
   const texto = req.body.texto || 'me interesa, cuánto vale?';
   const handle = (req.body.handle || '@test_user').replace('@', '');
 
-  // Buscar la primera SocialAccount activa
-  const cuenta = await prisma.socialAccount.findFirst({
-    where: { activa: true },
-    include: { tenant: true },
-  });
-
+  const cuenta = await getCuentaActiva();
   if (!cuenta) {
     return res.status(400).json({ error: 'No hay SocialAccount configurada. Ejecuta POST /api/setup/tenant primero.' });
   }
@@ -71,29 +100,22 @@ router.post('/simular-comentario', async (req, res) => {
 /**
  * GET /api/test/detector
  * Prueba el clasificador de keywords sin crear nada en DB.
- * Query: ?texto=me interesa el precio
  */
 router.get('/detector', (req, res) => {
   const texto = req.query.texto || '';
   if (!texto) return res.status(400).json({ error: 'Parámetro ?texto requerido' });
 
   const score = detector.calcularScore(texto);
-  res.json({
-    texto,
-    score,
-    genera_lead: score >= 2,
-  });
+  res.json({ texto, score, genera_lead: score >= 2 });
 });
 
 /**
  * POST /api/test/whatsapp
- * Envía un WhatsApp de prueba real vía Twilio al broker configurado.
- * Body: { whatsapp: "+56912345678" }  (opcional, usa el broker configurado si no se pasa)
+ * Envía un WhatsApp de prueba real vía Twilio.
  */
 router.post('/whatsapp', async (req, res) => {
   const twilio = require('twilio');
   const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-
   const numero = req.body.whatsapp || '+56975326208';
   const FROM = process.env.TWILIO_WHATSAPP_FROM;
 
@@ -112,18 +134,12 @@ router.post('/whatsapp', async (req, res) => {
 /**
  * POST /api/test/dm
  * Envía un DM real de prueba a un IGSID específico.
- * Útil para validar token, permisos y conectividad con Meta API.
- *
- * Body: { igsid: "123456789", mensaje: "Hola, esto es una prueba" }
  */
 router.post('/dm', async (req, res) => {
   const { igsid, mensaje } = req.body;
   if (!igsid) return res.status(400).json({ error: 'igsid requerido' });
 
-  const cuenta = await prisma.socialAccount.findFirst({
-    where: { activa: true },
-    include: { tenant: true },
-  });
+  const cuenta = await getCuentaActiva();
   if (!cuenta) return res.status(400).json({ error: 'Sin SocialAccount configurada' });
 
   const meta = require('../lib/meta');
@@ -134,9 +150,9 @@ router.post('/dm', async (req, res) => {
       mensaje || '¡Hola! Esto es un mensaje de prueba del sistema NBM Lead Capture 🏠',
       cuenta.token
     );
-    res.json({ ok: true, result });
+    res.json({ ok: true, cuenta_usada: cuenta.accountId, result });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, cuenta_usada: cuenta.accountId, error: err.message });
   }
 });
 

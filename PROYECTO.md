@@ -1,6 +1,6 @@
 # NBM Lead Capture System — Estado del Proyecto
 
-**Última actualización:** 1 Abril 2026
+**Última actualización:** 1 Abril 2026 — 18:30
 **Entorno productivo:** Railway
 **Repositorio:** https://github.com/nicobravomoral-ui/nbm-lead-capture-system
 
@@ -37,6 +37,8 @@
 | Tenant ID | `cmngh004o00001476hr9cpo1t` |
 | Plan | pilot |
 | IG Account ID actual | `1470519741134938` ⚠️ INCORRECTO — ver bloqueo Meta |
+| IG Account ID real (nicolas.bravo.inversiones) | `66869359832` ✅ CONFIRMADO |
+| Facebook Page ID (Nbm Lead Capture System) | `1031412506728321` ✅ CONFIRMADO |
 
 ### Broker configurado
 
@@ -71,7 +73,7 @@
 | Webhook | ✅ Verificado y activo |
 | Campos suscritos | `comments`, `messages` |
 | Tipo de integración | Instagram API with Facebook Login (Graph API) |
-| Cuenta Instagram conectada | ⚠️ PENDIENTE — ver bloqueo |
+| Cuenta Instagram conectada | ✅ `nicolas.bravo.inversiones` conectada a página "Nbm Lead Capture System" |
 
 ### Token de acceso Instagram
 
@@ -183,27 +185,37 @@ Comentario en IG/FB
 
 ## BLOQUEOS ACTIVOS
 
-### 🔴 BLOQUEO 1 — Instagram Business Account ID incorrecto
+### 🟡 BLOQUEO 1 — Permisos Meta app en "declined" (app en Development Mode)
 
-**Problema:** El `igAccountId` configurado (`1470519741134938`) es el ID de la Meta App, no de una cuenta de Instagram Business. Sin el ID correcto, el webhook no puede identificar al tenant cuando llega un comentario real.
+**Progreso hoy (1 Abril 2026):**
+- ✅ Página de Facebook "Nbm Lead Capture System" creada (ID: `1031412506728321`)
+- ✅ Instagram `nicolas.bravo.inversiones` conectado a la página (confirmado en Meta Business Suite)
+- ✅ Instagram Business Account ID real obtenido: **`66869359832`**
+- ❌ Permisos `pages_show_list`, `instagram_basic`, `instagram_manage_comments`, etc. están en status "declined" en la app
 
-**Qué se necesita:**
-1. Conectar la cuenta `nicolas.bravo.inversiones` (ya convertida a Business) a la Meta App
-2. En Meta Developers → Instagram → API with Facebook Login → conectar página de Facebook vinculada al Instagram
-3. Obtener el Instagram Business Account ID real que aparece al conectar
-4. Actualizar en el sistema:
+**Causa:** La Meta app `nbm-lead-capture` está en **Development Mode**. Los permisos avanzados de Instagram/páginas requieren que:
+1. La app complete **App Review** en Meta for Developers (para producción), O
+2. Se genere el token correctamente aceptando todos los permisos en el flujo OAuth
+
+**Siguiente acción — Obtener token válido:**
 ```
 POST /api/setup/tenant
 {
   "tenantNombre": "LoopOn",
-  "igAccountId": "ID_REAL_AQUI",
-  "igAccessToken": "TOKEN_LARGO_AQUI",
+  "igAccountId": "66869359832",
+  "igAccessToken": "TOKEN_LARGO_CON_PERMISOS",
   "brokerNombre": "Nicolás Bravo",
   "brokerWhatsapp": "+56975326208"
 }
 ```
 
-**Causa probable del bloqueo:** La página de Facebook no está vinculada al Instagram `nicolas.bravo.inversiones`, o el usuario administrador de Meta Developers no tiene acceso a esa página.
+**Para obtener el TOKEN_LARGO_CON_PERMISOS:**
+1. Ir a: https://developers.facebook.com/tools/explorer/
+2. App: `nbm-lead-capture`
+3. Añadir permisos: `pages_show_list`, `instagram_basic`, `instagram_manage_comments`, `instagram_manage_messages`, `pages_manage_metadata`, `pages_read_engagement`
+4. Hacer clic en "Generate Access Token" y aceptar TODOS los permisos
+5. Verificar con `GET /me/permissions` que todos están en "granted"
+6. Usar el token resultante en el endpoint `PUT /api/setup/token`
 
 ---
 
@@ -234,8 +246,9 @@ GET  /api/setup/status                       → estado completo del sistema
 
 ## PRÓXIMOS PASOS EN ORDEN
 
-1. **Resolver bloqueo Meta** — conectar `nicolas.bravo.inversiones` y obtener IG Business Account ID real
-2. **Resolver bloqueo Twilio** — activar sandbox desde WhatsApp +56975326208
+1. **Actualizar igAccountId en el sistema** — hacer `POST /api/setup/tenant` con `igAccountId: "66869359832"` y token correcto
+2. **Obtener token con permisos completos** — en Graph API Explorer, añadir todos los permisos y aceptarlos en el flujo OAuth
+3. **Resolver bloqueo Twilio** — activar sandbox desde WhatsApp +56975326208
 3. **Probar WhatsApp** — `POST /api/test/whatsapp` debe llegar al celular
 4. **Probar DM** — comentar en Instagram real y verificar que llega el DM
 5. **Validar flujo completo** — comentario → lead → DM → Claude → WhatsApp broker
