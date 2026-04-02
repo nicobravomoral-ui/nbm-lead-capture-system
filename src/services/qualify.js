@@ -6,17 +6,24 @@ const MAX_TURNOS = 4;
 
 /**
  * Procesa la respuesta del lead al DM y avanza la conversación de calificación.
- * @param {object} lead  Lead con conversacion incluida
+ * @param {object} lead  Lead completo (puede o no tener conversacion cargada)
  * @param {string} texto Mensaje del lead
+ * @returns {string} Respuesta del asistente
  */
 async function procesarRespuesta(lead, texto) {
-  const conv = lead.conversacion;
-  const mensajes = Array.isArray(conv?.mensajes) ? conv.mensajes : [];
+  // Cargar conversación si no viene incluida
+  let conv = lead.conversacion;
+  if (!conv) {
+    conv = await prisma.conversacion.findUnique({ where: { leadId: lead.id } });
+  }
+
+  const mensajes = Array.isArray(conv?.mensajes) ? [...conv.mensajes] : [];
 
   // Agregar mensaje del lead
   mensajes.push({ role: 'user', content: texto, timestamp: new Date().toISOString() });
 
-  const systemPrompt = buildSystemPrompt(lead);
+  const turnosUsuario = mensajes.filter(m => m.role === 'user').length;
+  const systemPrompt = buildSystemPrompt(lead, turnosUsuario);
   const historial = mensajes.map(({ role, content }) => ({ role, content }));
 
   const respuestaIA = await claude.chat(systemPrompt, historial);
@@ -24,21 +31,36 @@ async function procesarRespuesta(lead, texto) {
   // Agregar respuesta del asistente
   mensajes.push({ role: 'assistant', content: respuestaIA, timestamp: new Date().toISOString() });
 
-  // Detectar si la conversación terminó (calificado o no calificado)
-  const { estado, tipoBuyer, pieEstimado, disponibilidad } = extraerDatos(mensajes);
+  // Detectar estado final
+  const { estado, tipoBuyer, pieEstimado, disponibilidad } = extraerDatos(respuestaIA);
 
-  // Actualizar conversación
-  await prisma.conversacion.update({
+  // Upsert conversación — funciona aunque engage haya fallado y no la haya creado
+  await prisma.conversacion.upsert({
     where: { leadId: lead.id },
-    data: {
+    create: {
+      leadId: lead.id,
+      mensajes,
+      estado: estado === 'CALIFICADO' || estado === 'NO_CALIFICADO' ? 'COMPLETADA' : 'ACTIVA',
+    },
+    update: {
       mensajes,
       estado: estado === 'CALIFICADO' || estado === 'NO_CALIFICADO' ? 'COMPLETADA' : 'ACTIVA',
     },
   });
 
-  // Actualizar lead
+  // Determinar nuevo estado del lead
+  let nuevoEstado;
+  if (estado === 'CALIFICADO' || estado === 'NO_CALIFICADO') {
+    nuevoEstado = estado;
+  } else if (turnosUsuario >= MAX_TURNOS) {
+    // Turnos agotados: el asistente ya ofreció agendar en el prompt, marcamos calificado parcial
+    nuevoEstado = 'CALIFICADO';
+  } else {
+    nuevoEstado = 'EN_CONVERSACION';
+  }
+
   const updateData = {
-    estado: estado || (mensajes.filter(m => m.role === 'user').length >= MAX_TURNOS ? 'SIN_RESPUESTA' : 'EN_CONVERSACION'),
+    estado: nuevoEstado,
     ultimoContacto: new Date(),
   };
   if (tipoBuyer) updateData.tipoBuyer = tipoBuyer;
@@ -46,55 +68,62 @@ async function procesarRespuesta(lead, texto) {
   if (disponibilidad) updateData.disponibilidad = disponibilidad;
 
   await prisma.lead.update({ where: { id: lead.id }, data: updateData });
+  console.log(`[QUALIFY] Lead ${lead.id} → ${nuevoEstado} (turno ${turnosUsuario}/${MAX_TURNOS})`);
 
-  // Si calificó, asignar broker
-  if (estado === 'CALIFICADO') {
+  // Asignar broker si calificó
+  if (nuevoEstado === 'CALIFICADO') {
     await router.asignarBroker(lead.id, lead.tenantId);
   }
 
   return respuestaIA;
 }
 
-function buildSystemPrompt(lead) {
-  return `Eres un asistente de una inmobiliaria. Tu objetivo es entender si esta persona está lista para hablar con un asesor. Sé cálido, breve y directo. Nunca presiones. Máximo ${MAX_TURNOS} mensajes de ida y vuelta antes de ofrecer agendar. Habla en español chileno informal.
+function buildSystemPrompt(lead, turnoActual) {
+  const urgente = turnoActual >= MAX_TURNOS - 1;
 
-Debes hacer estas preguntas en orden, de forma conversacional:
+  return `Eres un asistente de LoopOn, una empresa inmobiliaria. Tu objetivo es entender si esta persona está lista para hablar con un asesor. Sé cálido, breve y directo. Nunca presiones. Habla en español chileno informal.
+
+Debes hacer estas 3 preguntas en orden, de forma conversacional. UNA por mensaje:
 1. ¿Estás buscando para vivir tú mismo o como inversión?
 2. ¿Tienes una idea de cuánto tienes disponible de pie?
 3. ¿Cuándo te acomoda conversar 15 minutos con un asesor?
 
-Cuando tengas las 3 respuestas, responde EXACTAMENTE con este formato JSON al final de tu mensaje (después de tu respuesta normal):
-[CALIFICADO: {"tipoBuyer":"...","pieEstimado":"...","disponibilidad":"..."}]
+${urgente ? 'Es el último turno disponible. Si tienes las 3 respuestas o ya hay suficiente información, cierra ofreciendo agendar directamente.' : ''}
 
-Si el lead claramente no tiene interés real o presupuesto, responde con [NO_CALIFICADO] al final.
+Cuando tengas las 3 respuestas, incluye al FINAL de tu mensaje (sin explicar que lo haces):
+[CALIFICADO: {"tipoBuyer":"inversor|vivienda","pieEstimado":"texto libre","disponibilidad":"texto libre"}]
 
-Contexto:
-- Comentó: "${lead.comentario}"
-- Red social: ${lead.plataforma}
+Si el lead no tiene interés real, presupuesto, o claramente no califica, incluye al FINAL:
+[NO_CALIFICADO]
+
+Contexto del lead:
+- Comentó en ${lead.plataforma}: "${lead.comentario}"
 - Score de intención: ${lead.score}/10`;
 }
 
-function extraerDatos(mensajes) {
-  const ultimoAsistente = [...mensajes].reverse().find(m => m.role === 'assistant');
-  if (!ultimoAsistente) return {};
-
-  const texto = ultimoAsistente.content;
-
-  const matchCalificado = texto.match(/\[CALIFICADO:\s*({.*?})\]/s);
+function extraerDatos(texto) {
+  // Buscar [CALIFICADO: {...}] — acepta variaciones de espacios y saltos de línea
+  const matchCalificado = texto.match(/\[CALIFICADO:\s*(\{[\s\S]*?\})\]/);
   if (matchCalificado) {
     try {
       const datos = JSON.parse(matchCalificado[1]);
-      return { estado: 'CALIFICADO', ...datos };
+      return {
+        estado: 'CALIFICADO',
+        tipoBuyer: datos.tipoBuyer || null,
+        pieEstimado: datos.pieEstimado || null,
+        disponibilidad: datos.disponibilidad || null,
+      };
     } catch {
-      return { estado: 'CALIFICADO' };
+      // JSON malformado pero Claude indicó que calificó
+      return { estado: 'CALIFICADO', tipoBuyer: null, pieEstimado: null, disponibilidad: null };
     }
   }
 
   if (texto.includes('[NO_CALIFICADO]')) {
-    return { estado: 'NO_CALIFICADO' };
+    return { estado: 'NO_CALIFICADO', tipoBuyer: null, pieEstimado: null, disponibilidad: null };
   }
 
-  return {};
+  return { estado: null, tipoBuyer: null, pieEstimado: null, disponibilidad: null };
 }
 
 module.exports = { procesarRespuesta };

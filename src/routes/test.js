@@ -156,4 +156,114 @@ router.post('/dm', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/test/qualify
+ * Simula una respuesta de DM del lead y ejecuta el ciclo qualify → route → notify.
+ * Usa el lead de prueba más reciente en estado CONTACTADO o EN_CONVERSACION.
+ *
+ * Body: { mensaje: "para vivir, tengo 10 millones de pie, puedo el jueves" }
+ *       { leadId: "xxx", mensaje: "..." }  (opcional: especificar lead)
+ */
+router.post('/qualify', async (req, res) => {
+  const { mensaje, leadId } = req.body;
+  if (!mensaje) return res.status(400).json({ error: 'mensaje requerido' });
+
+  // Buscar lead a usar
+  const where = leadId
+    ? { id: leadId }
+    : { estado: { in: ['CONTACTADO', 'EN_CONVERSACION', 'NUEVO'] }, tenantId: 'cmngh004o00001476hr9cpo1t' };
+
+  const lead = await prisma.lead.findFirst({
+    where,
+    orderBy: { createdAt: 'desc' },
+    include: { conversacion: true },
+  });
+
+  if (!lead) return res.status(404).json({ error: 'No hay lead disponible para calificar' });
+
+  // Si está en NUEVO, marcarlo como CONTACTADO primero
+  if (lead.estado === 'NUEVO') {
+    await prisma.lead.update({ where: { id: lead.id }, data: { estado: 'CONTACTADO' } });
+    lead.estado = 'CONTACTADO';
+  }
+
+  const qualify = require('../services/qualify');
+  const respuesta = await qualify.procesarRespuesta(lead, mensaje);
+
+  const leadActualizado = await prisma.lead.findUnique({ where: { id: lead.id } });
+
+  res.json({
+    ok: true,
+    leadId: lead.id,
+    mensaje_enviado: mensaje,
+    respuesta_claude: respuesta,
+    estado_resultante: leadActualizado.estado,
+    tipoBuyer: leadActualizado.tipoBuyer,
+    pieEstimado: leadActualizado.pieEstimado,
+    disponibilidad: leadActualizado.disponibilidad,
+  });
+});
+
+/**
+ * POST /api/test/flujo-completo
+ * Simula el flujo end-to-end: comentario → lead → qualify → route → WhatsApp broker.
+ * No llama Meta API (no DM real, no reply público).
+ *
+ * Body: { comentario: "me interesa el precio", mensajes: ["para vivir", "10M de pie", "el viernes"] }
+ */
+router.post('/flujo-completo', async (req, res) => {
+  const comentario = req.body.comentario || 'me interesa el precio, cuánto vale';
+  const mensajes = req.body.mensajes || [
+    'para vivir',
+    'tengo como 10 millones de pie',
+    'puedo el jueves en la tarde',
+  ];
+
+  const cuenta = await getCuentaActiva();
+  if (!cuenta) return res.status(400).json({ error: 'Sin SocialAccount configurada' });
+
+  // 1. Crear lead
+  const lead = await prisma.lead.create({
+    data: {
+      tenantId: cuenta.tenant.id,
+      handleRrss: `@test_flujo_${Date.now()}`,
+      plataforma: 'ig',
+      postUrl: null,
+      comentario,
+      score: require('../services/detector').calcularScore(comentario),
+      estado: 'CONTACTADO',
+    },
+  });
+
+  const pasos = [`✅ Lead creado — id: ${lead.id}, score: ${lead.score}`];
+  const qualify = require('../services/qualify');
+
+  // 2. Simular conversación
+  let leadActual = lead;
+  for (const msg of mensajes) {
+    leadActual = await prisma.lead.findUnique({ where: { id: lead.id }, include: { conversacion: true } });
+    const respuesta = await qualify.procesarRespuesta(leadActual, msg);
+    pasos.push(`💬 Lead: "${msg}" → Claude: "${respuesta.slice(0, 80)}..."`);
+    leadActual = await prisma.lead.findUnique({ where: { id: lead.id } });
+    if (leadActual.estado === 'CALIFICADO' || leadActual.estado === 'NO_CALIFICADO') break;
+  }
+
+  const final = await prisma.lead.findUnique({
+    where: { id: lead.id },
+    include: { asignaciones: { include: { broker: true } } },
+  });
+
+  res.json({
+    ok: true,
+    pasos,
+    resultado: {
+      estado: final.estado,
+      tipoBuyer: final.tipoBuyer,
+      pieEstimado: final.pieEstimado,
+      disponibilidad: final.disponibilidad,
+      broker_asignado: final.asignaciones[0]?.broker?.nombre || null,
+    },
+  });
+});
+
 module.exports = router;
