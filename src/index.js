@@ -14,6 +14,15 @@ app.use((req, res, next) => {
   next();
 });
 
+// CORS — permite llamadas desde herramientas de desarrollo (Graph API Explorer, etc.)
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+
 // Rutas
 app.use('/webhook', require('./routes/webhook'));
 app.use('/api/leads', require('./routes/leads'));
