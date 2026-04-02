@@ -29,7 +29,7 @@ app.get('/health', (_req, res) => {
                  'TWILIO_ACCOUNT_SID','TWILIO_AUTH_TOKEN','TWILIO_WHATSAPP_FROM'];
   const env = {};
   for (const v of vars) env[v] = process.env[v] ? '✅' : '❌ FALTA';
-  res.json({ status: 'ok', commit: '18170a5', node: process.version, env });
+  res.json({ status: 'ok', commit: process.env.RAILWAY_GIT_COMMIT_SHA || '5f9efbb', node: process.version, env });
 });
 
 // Cron de reasignación
