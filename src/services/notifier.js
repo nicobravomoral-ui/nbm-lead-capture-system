@@ -1,13 +1,13 @@
 const twilio = require('twilio');
 const prisma = require('../lib/prisma');
 
-const client = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
-
 const FROM = process.env.TWILIO_WHATSAPP_FROM;
 const APP_URL = process.env.APP_URL || 'https://nbm-lead-capture-system-production.up.railway.app';
+
+// Instanciación lazy — evita crash al startup si las credenciales no están definidas
+function getClient() {
+  return twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+}
 
 /**
  * Notifica al broker por WhatsApp cuando se le asigna un lead calificado.
@@ -28,7 +28,7 @@ Disponible:    ${lead.disponibilidad || 'No indicado'}
 Ver dashboard → ${dashboardUrl}`;
 
   try {
-    const result = await client.messages.create({
+    const result = await getClient().messages.create({
       from: FROM,
       to: `whatsapp:${broker.whatsapp}`,
       body: mensaje,
@@ -69,7 +69,7 @@ Acción requerida: agregar un broker o reasignar manualmente.
 Ver dashboard → ${APP_URL}/dashboard`;
 
   try {
-    const result = await client.messages.create({
+    const result = await getClient().messages.create({
       from: FROM,
       to: `whatsapp:${admin.whatsapp}`,
       body: mensaje,
